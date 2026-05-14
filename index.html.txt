@@ -1,0 +1,337 @@
+<meta name='viewport' content='width=device-width, initial-scale=1'/><!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Ploeger BP2140e - ULTIMATE I/O STATION v7.0</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.0.5/mqtt.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Roboto+Mono:wght@400;700&display=swap');
+
+:root {
+  --bg-black: #030406;
+  --bg-panel: #0B0E14;
+  --bg-card: #12161F;
+  --accent: #00E5FF;
+  --text: #E2E8F0;
+  --text-dim: #64748B;
+  --ok: #00FF88;
+  --warn: #FFD600;
+  --danger: #FF3131;
+  --border: #1E2532;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg-black); color: var(--text); font-family: 'Rajdhani', sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── HEADER ── */
+header { background: var(--bg-panel); padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--accent); }
+.brand { font-size: 24px; font-weight: 700; color: var(--accent); letter-spacing: 2px; }
+.sys-status { display: flex; gap: 15px; font-family: 'Roboto Mono', monospace; font-size: 12px; }
+.status-pill { background: rgba(0,0,0,0.4); padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #333; transition: 0.2s; }
+.dot.on { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+
+/* ── NAV ── */
+nav { display: flex; background: var(--bg-panel); border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--accent) var(--bg-panel); }
+nav::-webkit-scrollbar { height: 6px; }
+nav::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 3px; }
+.nav-btn { padding: 12px 18px; color: var(--text-dim); font-weight: 700; text-transform: uppercase; font-size: 13px; cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; }
+.nav-btn:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+.nav-btn.active { color: var(--accent); border-bottom-color: var(--accent); background: rgba(0, 229, 255, 0.08); }
+.nav-sep { border-left: 2px solid var(--border); margin: 5px 10px; }
+
+/* ── MAIN ── */
+main { flex: 1; position: relative; padding: 15px; overflow: hidden; }
+.page { position: absolute; inset: 15px; overflow-y: auto; display: none; padding-right: 5px; }
+.page.active { display: block; }
+.page::-webkit-scrollbar { width: 6px; }
+.page::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.grid { display: grid; gap: 15px; margin-bottom: 15px; }
+.g4 { grid-template-columns: repeat(4, 1fr); }
+.g3 { grid-template-columns: repeat(3, 1fr); }
+.g2 { grid-template-columns: repeat(2, 1fr); }
+
+/* ── CARDS ── */
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 15px; }
+.card-header { font-size: 12px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; border-bottom: 1px solid var(--border); margin-bottom: 10px; padding-bottom: 5px; }
+.val { font-family: 'Roboto Mono', monospace; font-weight: 700; color: var(--text); }
+.v-huge { font-size: 42px; line-height: 1; }
+.v-med { font-size: 24px; }
+.unit { font-size: 14px; color: var(--text-dim); margin-left: 5px; }
+
+/* ── PIN MATRIX ── */
+.pin-matrix { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 4px; }
+.pin { background: #0A0D14; border: 1px solid #1A1F2A; padding: 6px 4px; text-align: center; border-radius: 3px; font-family: 'Roboto Mono', monospace; font-size: 11px; color: var(--text-dim); transition: 0.2s; }
+.pin-label { display: block; font-size: 9px; margin-bottom: 2px; color: #4A5568; font-family: 'Rajdhani', sans-serif; font-weight: 700; }
+.pin.high { border-color: var(--ok); color: var(--ok); background: rgba(0,255,136,0.05); }
+
+/* ── TERMINAL & LISTS ── */
+.term { background: #000; color: #00FF41; font-family: 'Roboto Mono', monospace; font-size: 11px; padding: 10px; border-radius: 4px; height: 300px; overflow-y: auto; border: 1px solid #222; }
+.err-item { background: rgba(255,49,49,0.1); border-left: 3px solid var(--danger); padding: 8px 12px; margin-bottom: 6px; display: flex; justify-content: space-between; font-size: 13px; }
+
+/* ── BOOT ── */
+#boot-screen { position: fixed; inset: 0; background: #000; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.spin { width: 50px; height: 50px; border: 3px solid #111; border-top-color: var(--accent); border-radius: 50%; animation: s 1s linear infinite; }
+@keyframes s { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="boot-screen">
+    <div class="spin"></div>
+    <h2 style="color:var(--accent); margin-top:20px; letter-spacing:5px;">PLO-ENG v7.0 INITIALIZING</h2>
+</div>
+
+<header>
+    <div class="brand">PLO-ENG <span style="font-weight:400; color:var(--text-dim)">v7.0</span></div>
+    <div class="sys-status">
+        <div class="status-pill"><div class="dot" id="d-mqtt"></div>MQTT</div>
+        <div class="status-pill"><div class="dot" id="d-can"></div>CAN</div>
+        <div class="status-pill">SN: <span id="v-id" style="color:var(--accent)">FI48NC</span></div>
+        <div class="status-pill" id="v-time">00:00:00</div>
+    </div>
+</header>
+
+<nav>
+    <div class="nav-btn active" onclick="nav('dash')">01. Vue Maître</div>
+    <div class="nav-btn" onclick="nav('engine')">02. Moteur & SCR</div>
+    <div class="nav-btn" onclick="nav('harvest')">03. Récolte</div>
+    <div class="nav-btn" onclick="nav('hydro')">04. Hydrostatique</div>
+    <div class="nav-btn" onclick="nav('steer')">05. Direction 4P</div>
+    <div class="nav-btn" onclick="nav('cabin')">06. Commandes</div>
+    <div class="nav-btn" onclick="nav('pwm')">07. Bobines PWM</div>
+    <div class="nav-btn" onclick="nav('power')">08. Alimentation</div>
+    <div class="nav-btn" onclick="nav('can')">09. Réseau CAN</div>
+    <div class="nav-btn" onclick="nav('diag')">10. Diag Fautes</div>
+    <div class="nav-sep"></div>
+    <div class="nav-btn" onclick="nav('io-mc42fs')" style="color:var(--accent)">11. I/O: MC42-FS</div>
+    <div class="nav-btn" onclick="nav('io-mc42m')" style="color:var(--accent)">12. I/O: MC42-M</div>
+    <div class="nav-btn" onclick="nav('io-mc41h')" style="color:var(--accent)">13. I/O: MC41-H</div>
+    <div class="nav-btn" onclick="nav('io-mc41o')" style="color:var(--accent)">14. I/O: MC41-O</div>
+    <div class="nav-btn" onclick="nav('io-xc42k')" style="color:var(--accent)">15. I/O: XC42-K</div>
+    <div class="nav-btn" onclick="nav('io-xc211')" style="color:var(--accent)">16. I/O: XC21-1</div>
+    <div class="nav-btn" onclick="nav('io-xc212')" style="color:var(--accent)">17. I/O: XC21-2</div>
+    <div class="nav-btn" onclick="nav('io-xc23')" style="color:var(--accent)">18. I/O: XC23</div>
+</nav>
+
+<main>
+    <div class="page active" id="p-dash">
+        <div class="grid g3">
+            <div class="card"><div class="card-header">Vitesse Avancement</div><div class="val v-huge" id="v-speed">0.0</div><span class="unit">km/h</span></div>
+            <div class="card"><div class="card-header">Régime Moteur</div><div class="val v-huge" id="v-rpm">0</div><span class="unit">RPM</span></div>
+            <div class="card"><div class="card-header">Charge Moteur</div><div class="val v-huge" id="v-load">0</div><span class="unit">%</span></div>
+        </div>
+        <div class="grid g4">
+            <div class="card"><div class="card-header">Carburant</div><div class="val v-med" id="v-fuel">0%</div></div>
+            <div class="card"><div class="card-header">AdBlue</div><div class="val v-med" id="v-adblue">0%</div></div>
+            <div class="card"><div class="card-header">Temp. Hydro</div><div class="val v-med" id="v-thydro">0°C</div></div>
+            <div class="card"><div class="card-header">Batterie Globale</div><div class="val v-med" id="v-bat">0.0V</div></div>
+        </div>
+    </div>
+
+    <div class="page" id="p-engine">
+        <div class="grid g3">
+            <div class="card"><div class="card-header">Couple</div><div class="val v-med" id="e-torque">0%</div></div>
+            <div class="card"><div class="card-header">Consommation</div><div class="val v-med" id="e-fuelrate">0.0 L/h</div></div>
+            <div class="card"><div class="card-header">Pression Turbo</div><div class="val v-med" id="e-boost">0.0 Bar</div></div>
+        </div>
+        <div class="grid g2">
+            <div class="card"><div class="card-header">Dépollution SCR</div>
+                <div class="grid g2"><div><span>NOx In</span><div class="val v-med" id="e-noxin">0 ppm</div></div><div><span>NOx Out</span><div class="val v-med" id="e-noxout" style="color:var(--ok)">0 ppm</div></div></div>
+            </div>
+            <div class="card"><div class="card-header">Filtre DPF</div>
+                <div class="val v-med" id="e-soot">0%</div><span>Suie</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="page" id="p-harvest">
+        <div class="grid g2">
+            <div class="card"><div class="card-header">Rotor Gauche</div><div class="val v-med" id="h-rg">0 RPM</div><div>Pression: <span id="h-prg">0</span> Bar</div></div>
+            <div class="card"><div class="card-header">Rotor Droit</div><div class="val v-med" id="h-rd">0 RPM</div><div>Pression: <span id="h-prd">0</span> Bar</div></div>
+        </div>
+        <div class="grid g4">
+            <div class="card"><div class="card-header">Tapis 1</div><div class="val v-med" id="h-t1">0 RPM</div></div>
+            <div class="card"><div class="card-header">Tapis 2</div><div class="val v-med" id="h-t2">0 RPM</div></div>
+            <div class="card"><div class="card-header">Tapis 3</div><div class="val v-med" id="h-t3">0 RPM</div></div>
+            <div class="card"><div class="card-header">Tapis 4</div><div class="val v-med" id="h-t4">0 RPM</div></div>
+        </div>
+        <div class="grid g3">
+            <div class="card"><div class="card-header">Hauteur Cueilleur</div><div class="val v-med" id="h-height">0 cm</div></div>
+            <div class="card"><div class="card-header">Inclinaison Cueilleur</div><div class="val v-med" id="h-tilt">0.0 °</div></div>
+            <div class="card"><div class="card-header">Consigne Auto</div><div class="val v-med" id="h-set">0 cm</div></div>
+        </div>
+    </div>
+
+    <div class="page" id="p-hydro">
+        <div class="grid g2">
+            <div class="card"><div class="card-header">Pression Travail</div><div class="val v-huge" id="y-work" style="color:var(--danger)">0</div><span class="unit">Bar</span></div>
+            <div class="card"><div class="card-header">Pression Gavage</div><div class="val v-huge" id="y-charge">0</div><span class="unit">Bar</span></div>
+        </div>
+    </div>
+
+    <div class="page" id="p-steer">
+        <div class="card" style="margin-bottom:15px;">
+            <div class="card-header">Capteurs de Position (4 Roues Directrices)</div>
+            <div class="grid g4" style="text-align:center;">
+                <div><div class="card-header">AV Gauche</div><div class="val v-med" id="s-avg">0.0°</div></div>
+                <div><div class="card-header">AV Droit</div><div class="val v-med" id="s-avd">0.0°</div></div>
+                <div><div class="card-header">AR Gauche</div><div class="val v-med" id="s-arg">0.0°</div></div>
+                <div><div class="card-header">AR Droit</div><div class="val v-med" id="s-ard">0.0°</div></div>
+            </div>
+        </div>
+        <div class="grid g2">
+            <div class="card"><div class="card-header">Mode de Direction</div><div class="val v-med" id="s-mode" style="color:var(--accent)">STANDARD</div></div>
+            <div class="card"><div class="card-header">Alignement / Synchro</div><div class="val v-med" id="s-sync" style="color:var(--ok)">OK</div></div>
+        </div>
+    </div>
+
+    <div class="page" id="p-cabin">
+        <div class="grid g2">
+            <div class="card"><div class="card-header">Joystick Principal (Valeurs Brutes CAN)</div>
+                <div style="font-family:'Roboto Mono'; line-height:2;">
+                    Axe X (Direction): <span id="j-x" style="color:var(--accent); float:right">0%</span><br>
+                    Axe Y (Avancement): <span id="j-y" style="color:var(--accent); float:right">0%</span><br>
+                    Axe Z (Torsion): <span id="j-z" style="color:var(--accent); float:right">0%</span><br>
+                    Molette (Scroll): <span id="j-s" style="color:var(--accent); float:right">0%</span>
+                </div>
+            </div>
+            <div class="card"><div class="card-header">Pédale Avancement</div><div class="val v-huge" id="c-pedal">0</div><span class="unit">%</span></div>
+        </div>
+    </div>
+
+    <div class="page" id="p-pwm">
+        <div class="card"><div class="card-header">Feedback Courant Bobines PWM (mA)</div>
+            <div class="grid g4" id="pwm-grid" style="font-family:'Roboto Mono'; font-size:12px;"></div>
+        </div>
+    </div>
+
+    <div class="page" id="p-power">
+        <div class="card"><div class="card-header">Alimentation des Calculateurs (KL30 / KL15)</div>
+            <div class="grid g4" id="power-grid"></div>
+        </div>
+    </div>
+
+    <div class="page" id="p-can">
+        <div class="grid g3">
+            <div class="card"><div class="card-header">Load J1939</div><div class="val v-med" id="c-l1">0%</div></div>
+            <div class="card"><div class="card-header">Load CAN A</div><div class="val v-med" id="c-l2">0%</div></div>
+            <div class="card"><div class="card-header">Load CAN B</div><div class="val v-med" id="c-l3">0%</div></div>
+        </div>
+        <div class="card"><div class="card-header">Terminal POG-CAN</div><div class="term" id="can-term"></div></div>
+    </div>
+
+    <div class="page" id="p-diag">
+        <div class="card"><div class="card-header">Journal des Erreurs (DM1 / SPN / FMI)</div>
+            <div id="diag-list"><div style="padding:20px; text-align:center; color:var(--text-dim);">Aucune faute active</div></div>
+        </div>
+    </div>
+
+    <div class="page" id="p-io-mc42fs"><div class="card"><div class="card-header">Matrice des Pins : MC42-FS (Master Controller)</div><div class="pin-matrix" id="mat-mc42fs"></div></div></div>
+    <div class="page" id="p-io-mc42m"><div class="card"><div class="card-header">Matrice des Pins : MC42-M (Shafts)</div><div class="pin-matrix" id="mat-mc42m"></div></div></div>
+    <div class="page" id="p-io-mc41h"><div class="card"><div class="card-header">Matrice des Pins : MC41-H (Harvest Head)</div><div class="pin-matrix" id="mat-mc41h"></div></div></div>
+    <div class="page" id="p-io-mc41o"><div class="card"><div class="card-header">Matrice des Pins : MC41-O (Oil Cooler)</div><div class="pin-matrix" id="mat-mc41o"></div></div></div>
+    <div class="page" id="p-io-xc42k"><div class="card"><div class="card-header">Matrice des Pins : XC42-K (Relays)</div><div class="pin-matrix" id="mat-xc42k"></div></div></div>
+    <div class="page" id="p-io-xc211"><div class="card"><div class="card-header">Matrice des Pins : XC21-1 (Extension A)</div><div class="pin-matrix" id="mat-xc211"></div></div></div>
+    <div class="page" id="p-io-xc212"><div class="card"><div class="card-header">Matrice des Pins : XC21-2 (Extension B)</div><div class="pin-matrix" id="mat-xc212"></div></div></div>
+    <div class="page" id="p-io-xc23"><div class="card"><div class="card-header">Matrice des Pins : XC23 (Lights & Aux)</div><div class="pin-matrix" id="mat-xc23"></div></div></div>
+
+</main>
+
+<script>
+// --- CONFIGURATION ---
+const CONFIG = {
+    host: "868689eb7527487a9abc920a816e494a.s1.eu.hivemq.cloud",
+    user: "ploeger_master",
+    pass: "Y7@mzYHSKfMqgL4",
+    id: "FI48NC"
+};
+
+// Liste des 8 Modules pour les matrices I/O (40 pins chacun)
+const IO_MODULES = [
+    {id: 'mc42fs', name: 'MC42-FS'}, {id: 'mc42m', name: 'MC42-M'},
+    {id: 'mc41h', name: 'MC41-H'},   {id: 'mc41o', name: 'MC41-O'},
+    {id: 'xc42k', name: 'XC42-K'},   {id: 'xc211', name: 'XC21-1'},
+    {id: 'xc212', name: 'XC21-2'},   {id: 'xc23', name: 'XC23'}
+];
+
+const BOBINES = ["P41-MAV","P57-MAR","P44-R","M48-D","P55-D","Y1","Y2","Y3","Y4-T1","Y5-T2","Y6-T3","Y7-T4","Y8-L","Y9-B","Y10-IG","Y11-ID"];
+
+let client = null;
+
+// --- NAVIGATION ---
+function nav(id) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('p-' + id).classList.add('active');
+    event.target.classList.add('active');
+}
+
+// --- GENERATEUR MATRICES I/O ET LISTES ---
+function initUI() {
+    // 1. Bobines (Page 7)
+    const pwmg = document.getElementById('pwm-grid');
+    BOBINES.forEach((b, i) => {
+        pwmg.innerHTML += `<div style="padding:6px; border:1px solid var(--border); border-radius:4px;">${b}: <span id="b-${i}" style="color:var(--accent); float:right;">0</span></div>`;
+    });
+
+    // 2. Power KL30/KL15 (Page 8)
+    const pg = document.getElementById('power-grid');
+    IO_MODULES.forEach(m => {
+        pg.innerHTML += `<div class="card" style="padding:10px;"><div class="card-header" style="margin-bottom:5px;">${m.name}</div><div style="font-family:'Roboto Mono'; font-size:12px;">KL30: <span id="v30-${m.id}" style="color:var(--ok)">0.0V</span><br>KL15: <span id="v15-${m.id}" style="color:var(--accent)">0.0V</span></div></div>`;
+    });
+
+    // 3. Construction des 8 matrices (Pages 11 à 18) - 320 pins total
+    IO_MODULES.forEach(mod => {
+        const el = document.getElementById('mat-' + mod.id);
+        if(el) {
+            for(let i=1; i<=40; i++) {
+                el.innerHTML += `<div class="pin" id="${mod.id}-p${i}"><span class="pin-label">PIN ${i}</span><span id="${mod.id}-v${i}">0.00</span></div>`;
+            }
+        }
+    });
+}
+
+// --- DEMARRAGE & MQTT ---
+window.onload = () => {
+    initUI();
+    const url = `wss://${CONFIG.host}:8884/mqtt`;
+    client = mqtt.connect(url, { username: CONFIG.user, password: CONFIG.pass, clientId: 'io_station_' + Math.random().toString(16).substr(2,4) });
+
+    client.on('connect', () => {
+        document.getElementById('boot-screen').style.display = 'none';
+        document.getElementById('d-mqtt').classList.add('on');
+        client.subscribe(`ploeger/${CONFIG.id}/#`);
+        logTerm("SYS: Connexion Broker réussie. Écoute globale activée.");
+    });
+
+    client.on('message', (topic, payload) => {
+        const data = JSON.parse(payload.toString());
+        const type = topic.split('/').pop();
+        routeData(type, data);
+    });
+};
+
+function routeData(type, d) {
+    // Pulse CAN
+    const dot = document.getElementById('d-can');
+    dot.classList.add('on'); setTimeout(() => dot.classList.remove('on'), 100);
+
+    if(type === 'ENG') {
+        set('v-rpm', d.rpm); set('v-load', d.load); set('v-fuel', d.fuel+'%'); set('v-adblue', d.adblue+'%'); set('v-bat', d.bat.toFixed(1)+'V');
+        set('e-torque', d.torque+'%'); set('e-fuelrate', d.frate+' L/h'); set('e-boost', d.boost.toFixed(1));
+        set('e-noxin', d.noxin+' ppm'); set('e-noxout', d.noxout+' ppm'); set('e-soot', d.soot+'%');
+    }
+    if(type === 'MAC') {
+        set('v-speed', d.speed.toFixed(1));
+        set('h-rg', d.rg); set('h-rd', d.rd); set('h-prg', d.prg); set('h-prd', d.prd);
+        set('h-t1', d.t1); set('h-t2', d.t2); set('h-t3', d.t3); set('h-t4', d.t4);
+        set('h-height', d.h); set('h-tilt', d.tilt.toFixed(1)); set('h-set', d.hset);
+    }
+    if(type === 'HYD') {
+        set('y-work', d.pwork); set('y-charge', d.pcharge); set('v-thydro', d.temp+'°C');
+        set('s-avg', d.avg.toFixed(1)+'°'); set('s-avd', d.avd.toFixed(1)+'°');
+        set('s-arg', d.arg.toFixed(1)+'°'); set('s-ard', d.ard.toFixed(1)+'°');
+        set('s-mode', d.smode); set('s-syn
